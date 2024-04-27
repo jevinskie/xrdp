@@ -52,19 +52,30 @@
 
 /* TS_UD_HEADER: type ((2.2.1.3.1) */
 /* TODO: to be renamed */
-#define SEC_TAG_CLI_INFO               0xc001 /* CS_CORE? */
-#define SEC_TAG_CLI_CRYPT              0xc002 /* CS_SECURITY? */
-#define SEC_TAG_CLI_CHANNELS           0xc003 /* CS_CHANNELS? */
-#define SEC_TAG_CLI_4                  0xc004 /* CS_CLUSTER? */
-#define SEC_TAG_CLI_MONITOR            0xc005 /* CS_MONITOR */
-#define SEC_TAG_CLI_MONITOR_EX         0xc008 /* CS_MONITOR_EX */
+#define SEC_TAG_CLI_INFO       0xc001 /* CS_CORE? */
+#define SEC_TAG_CLI_CRYPT      0xc002 /* CS_SECURITY? */
+#define SEC_TAG_CLI_CHANNELS   0xc003 /* CS_CHANNELS? */
+#define SEC_TAG_CLI_4          0xc004 /* CS_CLUSTER? */
+#define SEC_TAG_CLI_MONITOR    0xc005 /* CS_MONITOR */
+#define SEC_TAG_CLI_MONITOR_EX 0xc008 /* CS_MONITOR_EX */
 
 /* Client Core Data: colorDepth, postBeta2ColorDepth (2.2.1.3.2) */
-#define RNS_UD_COLOR_4BPP              0xCA00
-#define RNS_UD_COLOR_8BPP              0xCA01
-#define RNS_UD_COLOR_16BPP_555         0xCA02
-#define RNS_UD_COLOR_16BPP_565         0xCA03
-#define RNS_UD_COLOR_24BPP             0xCA04
+#define RNS_UD_COLOR_4BPP      0xCA00
+#define RNS_UD_COLOR_8BPP      0xCA01
+#define RNS_UD_COLOR_16BPP_555 0xCA02
+#define RNS_UD_COLOR_16BPP_565 0xCA03
+#define RNS_UD_COLOR_24BPP     0xCA04
+
+/* Client Core Data: supportedColorDepths (2.2.1.3.2) */
+#define RNS_UD_24BPP_SUPPORT 0x0001
+#define RNS_UD_16BPP_SUPPORT 0x0002
+#define RNS_UD_15BPP_SUPPORT 0x0004
+#define RNS_UD_32BPP_SUPPORT 0x0008
+
+/* Client Core Data: earlyCapabilityFlags (2.2.1.3.2) */
+#define RNS_UD_CS_WANT_32BPP_SESSION         0x0002
+#define RNS_UD_CS_SUPPORT_MONITOR_LAYOUT_PDU 0x0040
+#define RNS_UD_CS_SUPPORT_DYNVC_GFX_PROTOCOL 0x0100
 
 /* Client Core Data: connectionType  (2.2.1.3.2) */
 #define CONNECTION_TYPE_MODEM          0x01
@@ -75,11 +86,15 @@
 #define CONNECTION_TYPE_LAN            0x06
 #define CONNECTION_TYPE_AUTODETECT     0x07
 
-/* Channel definition structure CHANNEL_DEF (2.2.1.3.4.1) */
+/* TS_UD_CS_NET (2.2.1.3.4) */
 /* This isn't explicitly named in MS-RDPBCGR */
+#define MAX_STATIC_CHANNELS            31
+
+/* Channel definition structure CHANNEL_DEF (2.2.1.3.4.1) */
 #define CHANNEL_NAME_LEN                7
 /* These names are also not explicitly defined in MS-RDPBCGR */
 #define CLIPRDR_SVC_CHANNEL_NAME        "cliprdr"
+#define DRDYNVC_SVC_CHANNEL_NAME        "drdynvc"
 #define RAIL_SVC_CHANNEL_NAME           "rail"
 #define RDPSND_SVC_CHANNEL_NAME         "rdpsnd"
 #define RDPDR_SVC_CHANNEL_NAME          "rdpdr"
@@ -130,6 +145,9 @@
 #define RDP_LOGON_BLOB                 0x0100
 #define RDP_LOGON_LEAVE_AUDIO          0x2000
 #define RDP_LOGON_RAIL                 0x8000
+
+/* Extended Info Packet: clientAddress (2.2.1.11.1.1.1) */
+#define EXTENDED_INFO_MAX_CLIENT_ADDR_LENGTH 80
 
 /* Extended Info Packet: performanceFlags (2.2.1.11.1.1.1) */
 /* TODO: to be renamed */
@@ -431,6 +449,7 @@
 #define RDP_DATA_PDU_LOGON             38
 #define RDP_DATA_PDU_FONT2             39
 #define RDP_DATA_PDU_DISCONNECT        47
+#define PDUTYPE2_MONITOR_LAYOUT_PDU    55
 
 /* TS_SECURITY_HEADER: flags (2.2.8.1.1.2.1) */
 /* TODO: to be renamed */

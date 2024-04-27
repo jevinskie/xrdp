@@ -1,14 +1,16 @@
 [submodule "librfxcodec"]
 	path = librfxcodec
-	url = https://github.com/team-unstablers/librfxcodec.git
-	branch = .
+	url = https://github.com/jevinskie/librfxcodec.git
+	branch = jev/devel-with-ulalaca
 	ignore = untracked
 
 [submodule "libpainter"]
 	path = libpainter
 	url = https://github.com/neutrinolabs/libpainter.git
-	branch = .
+	branch = devel
 	ignore = untracked
+
 [submodule "ulalaca"]
 	path = ulalaca
-	url = https://github.com/team-unstablers/ulalaca-xrdp.git
+	url = https://github.com/jevinskie/ulalaca-xrdp.git
+	branch = jev/main

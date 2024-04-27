@@ -20,22 +20,15 @@
 #ifndef XRDP_NEUTRINORDP_H
 #define XRDP_NEUTRINORDP_H
 
-/* include other h files */
 #include "arch.h"
-#include "parse.h"
-#include "os_calls.h"
-#include "defines.h"
-#include "xrdp_rail.h"
-#include "xrdp_client_info.h"
 #include "xrdp_constants.h"
+#include "xrdp_client_info.h"
 
-/* this is the freerdp main header */
-#include <freerdp/freerdp.h>
-#include <freerdp/rail.h>
-#include <freerdp/rail/rail.h>
-#include <freerdp/codec/bitmap.h>
-//#include <freerdp/utils/memory.h>
-//#include "/home/jay/git/jsorg71/staging/include/freerdp/freerdp.h"
+/* Incomplete type definitions, referenced below */
+struct rail_window_state_order;
+struct rail_notify_state_order;
+struct rail_monitored_desktop_order;
+struct rail_icon_info;
 
 struct bitmap_item
 {
@@ -95,7 +88,10 @@ struct mod
     int (*mod_suppress_output)(struct mod *mod, int suppress,
                                int left, int top, int right, int bottom);
     int (*mod_server_monitor_resize)(struct mod *mod,
-                                     int width, int height);
+                                     int width, int height,
+                                     int num_monitors,
+                                     const struct monitor_info *monitors,
+                                     int *in_progress);
     int (*mod_server_monitor_full_invalidate)(struct mod *mod,
             int width, int height);
     int (*mod_server_version_message)(struct mod *mod);
@@ -133,7 +129,10 @@ struct mod
                             int box_left, int box_top,
                             int box_right, int box_bottom,
                             int x, int y, char *data, int data_len);
-    int (*server_reset)(struct mod *v, int width, int height, int bpp);
+    int (*client_monitor_resize)(struct mod *v, int width, int height,
+                                 int num_monitors,
+                                 const struct monitor_info *monitors);
+    int (*server_monitor_resize_done)(struct mod *v);
     int (*server_get_channel_count)(struct mod *v);
     int (*server_query_channel)(struct mod *v, int index,
                                 char *channel_name,
@@ -198,7 +197,7 @@ struct mod
                               int flags, int frame_id);
     int (*server_session_info)(struct mod *v, const char *data,
                                int data_bytes);
-    tintptr server_dumby[100 - 46]; /* align, 100 minus the number of server
+    tintptr server_dumby[100 - 47]; /* align, 100 minus the number of server
                                        functions above */
     /* common */
     tintptr handle; /* pointer to self as long */

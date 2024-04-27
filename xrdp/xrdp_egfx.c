@@ -40,6 +40,7 @@
 #include "xrdp_egfx.h"
 #include "libxrdp.h"
 #include "xrdp_channel.h"
+#include "xrdp_mm.h"
 #include <limits.h>
 
 #define MAX_PART_SIZE 0xFFFF
@@ -105,7 +106,7 @@ xrdp_egfx_create_surface(struct xrdp_egfx_bulk *bulk, int surface_id,
     int bytes;
     struct stream *s;
 
-    LOG(LOG_LEVEL_TRACE, "xrdp_egfx_create_surface:");
+    LOG_DEVEL(LOG_LEVEL_TRACE, "xrdp_egfx_create_surface:");
     make_stream(s);
     init_stream(s, 8192);
     /* RDP_SEGMENTED_DATA */
@@ -135,12 +136,12 @@ xrdp_egfx_send_create_surface(struct xrdp_egfx *egfx, int surface_id,
     int error;
     struct stream *s;
 
-    LOG(LOG_LEVEL_TRACE, "xrdp_egfx_send_create_surface:");
+    LOG_DEVEL(LOG_LEVEL_TRACE, "xrdp_egfx_send_create_surface:");
     s = xrdp_egfx_create_surface(egfx->bulk, surface_id, width, height,
                                  pixel_format);
     error = xrdp_egfx_send_s(egfx, s);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_create_surface: xrdp_egfx_send_s "
-        "error %d", error);
+    LOG_DEVEL(LOG_LEVEL_DEBUG, "xrdp_egfx_send_create_surface: xrdp_egfx_send_s "
+              "error %d", error);
     free_stream(s);
     return error;
 }
@@ -181,8 +182,8 @@ xrdp_egfx_send_delete_surface(struct xrdp_egfx *egfx, int surface_id)
     LOG(LOG_LEVEL_TRACE, "xrdp_egfx_send_delete_surface:");
     s = xrdp_egfx_delete_surface(egfx->bulk, surface_id);
     error = xrdp_egfx_send_s(egfx, s);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_delete_surface: xrdp_egfx_send_s "
-        "error %d", error);
+    LOG_DEVEL(LOG_LEVEL_DEBUG, "xrdp_egfx_send_delete_surface: xrdp_egfx_send_s "
+              "error %d", error);
     free_stream(s);
     return error;
 }
@@ -392,8 +393,11 @@ xrdp_egfx_send_frame_start(struct xrdp_egfx *egfx, int frame_id, int timestamp)
     LOG(LOG_LEVEL_TRACE, "xrdp_egfx_send_frame_start:");
     s = xrdp_egfx_frame_start(egfx->bulk, frame_id, timestamp);
     error = xrdp_egfx_send_s(egfx, s);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_frame_start: xrdp_egfx_send_s "
-        "error %d", error);
+    if (error != 0)
+    {
+        LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_frame_start: xrdp_egfx_send_s "
+            "error %d", error);
+    }
     free_stream(s);
     return error;
 }
@@ -434,8 +438,11 @@ xrdp_egfx_send_frame_end(struct xrdp_egfx *egfx, int frame_id)
     LOG(LOG_LEVEL_TRACE, "xrdp_egfx_send_frame_end:");
     s = xrdp_egfx_frame_end(egfx->bulk, frame_id);
     error = xrdp_egfx_send_s(egfx, s);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_frame_end: xrdp_egfx_send_s "
-        "error %d", error);
+    if (error != 0)
+    {
+        LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_frame_end: xrdp_egfx_send_s "
+            "error %d", error);
+    }
     free_stream(s);
     return error;
 }
@@ -538,16 +545,16 @@ xrdp_egfx_wire_to_surface1(struct xrdp_egfx_bulk *bulk, int surface_id,
         /* RDP8_BULK_ENCODED_DATA */
         out_uint8(s, PACKET_COMPR_TYPE_RDP8); /* header */
         out_uint8a(s, bitmap_data8 + index, segment_size);
-        LOG(LOG_LEVEL_DEBUG, "  segment index %d segment_size %d",
-            segment_count, segment_size);
+        LOG_DEVEL(LOG_LEVEL_DEBUG, "  segment index %d segment_size %d",
+                  segment_count, segment_size);
         index += segment_size;
         segment_count++;
     }
     s_mark_end(s);
     s_pop_layer(s, iso_hdr);
     out_uint16_le(s, segment_count);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_wire_to_surface1: segment_count %d",
-        segment_count);
+    LOG_DEVEL(LOG_LEVEL_DEBUG, "xrdp_egfx_wire_to_surface1: segment_count %d",
+              segment_count);
     return s;
 }
 
@@ -561,13 +568,13 @@ xrdp_egfx_send_wire_to_surface1(struct xrdp_egfx *egfx, int surface_id,
     int error;
     struct stream *s;
 
-    LOG(LOG_LEVEL_TRACE, "xrdp_egfx_send_wire_to_surface1:");
+    LOG_DEVEL(LOG_LEVEL_TRACE, "xrdp_egfx_send_wire_to_surface1:");
     s = xrdp_egfx_wire_to_surface1(egfx->bulk, surface_id, codec_id,
                                    pixel_format, dest_rect,
                                    bitmap_data, bitmap_data_length);
     error = xrdp_egfx_send_s(egfx, s);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_wire_to_surface1: xrdp_egfx_send_s "
-        "error %d", error);
+    LOG_DEVEL(LOG_LEVEL_DEBUG, "xrdp_egfx_send_wire_to_surface1: xrdp_egfx_send_s "
+              "error %d", error);
     free_stream(s);
     return error;
 }
@@ -586,7 +593,7 @@ xrdp_egfx_wire_to_surface2(struct xrdp_egfx_bulk *bulk, int surface_id,
     struct stream *s;
     char *bitmap_data8;
 
-    LOG(LOG_LEVEL_TRACE, "xrdp_egfx_wire_to_surface2:");
+    LOG_DEVEL(LOG_LEVEL_TRACE, "xrdp_egfx_wire_to_surface2:");
     make_stream(s);
     bytes = bitmap_data_length + 8192;
     bytes += 5 * (bitmap_data_length / MAX_PART_SIZE);
@@ -623,16 +630,16 @@ xrdp_egfx_wire_to_surface2(struct xrdp_egfx_bulk *bulk, int surface_id,
         /* RDP8_BULK_ENCODED_DATA */
         out_uint8(s, PACKET_COMPR_TYPE_RDP8); /* header */
         out_uint8a(s, bitmap_data8 + index, segment_size);
-        LOG(LOG_LEVEL_DEBUG, "  segment index %d segment_size %d",
-            segment_count, segment_size);
+        LOG_DEVEL(LOG_LEVEL_DEBUG, "  segment index %d segment_size %d",
+                  segment_count, segment_size);
         index += segment_size;
         segment_count++;
     }
     s_mark_end(s);
     s_pop_layer(s, iso_hdr);
     out_uint16_le(s, segment_count);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_wire_to_surface2: segment_count %d",
-        segment_count);
+    LOG_DEVEL(LOG_LEVEL_DEBUG, "xrdp_egfx_wire_to_surface2: segment_count %d",
+              segment_count);
     return s;
 }
 
@@ -651,8 +658,8 @@ xrdp_egfx_send_wire_to_surface2(struct xrdp_egfx *egfx, int surface_id,
                                    codec_context_id, pixel_format,
                                    bitmap_data, bitmap_data_length);
     error = xrdp_egfx_send_s(egfx, s);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_send_wire_to_surface2: xrdp_egfx_send_s "
-        "error %d", error);
+    LOG_DEVEL(LOG_LEVEL_DEBUG, "xrdp_egfx_send_wire_to_surface2: xrdp_egfx_send_s "
+              "error %d", error);
     free_stream(s);
     return error;
 }
@@ -769,7 +776,7 @@ xrdp_egfx_process_frame_ack(struct xrdp_egfx *egfx, struct stream *s)
     in_uint32_le(s, queueDepth);
     in_uint32_le(s, intframeId);
     in_uint32_le(s, totalFramesDecoded);
-    LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_process_frame_ack: queueDepth %d"
+    LOG(LOG_LEVEL_TRACE, "xrdp_egfx_process_frame_ack: queueDepth %d"
         " intframeId %d totalFramesDecoded %d",
         queueDepth, intframeId, totalFramesDecoded);
     if (egfx->frame_ack != NULL)
@@ -869,7 +876,7 @@ xrdp_egfx_process(struct xrdp_egfx *egfx, struct stream *s)
         in_uint16_le(s, flags);
         in_uint32_le(s, pduLength);
         s->end = holdp + pduLength;
-        LOG(LOG_LEVEL_DEBUG, "xrdp_egfx_process: cmdId 0x%x flags %d"
+        LOG(LOG_LEVEL_TRACE, "xrdp_egfx_process: cmdId 0x%x flags %d"
             " pduLength %d", cmdId, flags, pduLength);
         if (pduLength < 8)
         {
@@ -921,10 +928,6 @@ xrdp_egfx_open_response(intptr_t id, int chan_id, int creation_status)
     LOG(LOG_LEVEL_TRACE, "xrdp_egfx_open_response:");
     return 0;
 }
-
-int
-advance_resize_state_machine(struct xrdp_mm *mm,
-                             enum display_resize_state new_state);
 
 /******************************************************************************/
 /* from client */
@@ -1120,6 +1123,10 @@ xrdp_egfx_shutdown_close_connection(struct xrdp_egfx *egfx)
             " libxrdp_drdynvc_close failed %d", error);
         return error;
     }
+
+    // Ignore any messages we haven't processed yet
+    egfx->caps_advertise = NULL;
+    egfx->frame_ack = NULL;
 
     return error;
 }

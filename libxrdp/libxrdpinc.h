@@ -24,6 +24,7 @@
 #include "xrdp_rail.h"
 
 struct list;
+struct monitor_info;
 
 /* struct xrdp_client_info moved to xrdp_client_info.h */
 
@@ -195,8 +196,7 @@ libxrdp_orders_send_font(struct xrdp_session *session,
                          struct xrdp_font_char *font_char,
                          int font_index, int char_index);
 int
-libxrdp_reset(struct xrdp_session *session,
-              unsigned int width, unsigned int height, int bpp);
+libxrdp_reset(struct xrdp_session *session);
 int
 libxrdp_orders_send_raw_bitmap2(struct xrdp_session *session,
                                 int width, int height, int bpp, char *data,
@@ -240,6 +240,8 @@ libxrdp_send_to_channel(struct xrdp_session *session, int channel_id,
 int
 libxrdp_disable_channel(struct xrdp_session *session, int channel_id,
                         int is_disabled);
+int
+libxrdp_drdynvc_start(struct xrdp_session *session);
 int
 libxrdp_drdynvc_open(struct xrdp_session *session, const char *name,
                      int flags, struct xrdp_drdynvc_procs *procs,
@@ -345,5 +347,22 @@ libxrdp_process_monitor_stream(struct stream *s, struct display_size_description
 int EXPORT_CC
 libxrdp_process_monitor_ex_stream(struct stream *s,
                                   struct display_size_description *description);
+
+/**
+ * Convert a list of monitors into a full description
+ *
+ * Monitor data is sanitised during the conversion
+ *
+ * @param num_monitor Monitor count (> 0)
+ * @param monitors List of monitors
+ * @param[out] description Display size description
+ *
+ * @return 0 if the data is processed, non-zero if there is an error.
+ */
+int
+libxrdp_init_display_size_description(
+    unsigned int num_monitor,
+    const struct monitor_info *monitors,
+    struct display_size_description *description);
 
 #endif

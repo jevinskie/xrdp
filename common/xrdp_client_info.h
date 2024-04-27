@@ -67,6 +67,13 @@ struct display_size_description
     unsigned int session_height;
 };
 
+enum client_resize_mode
+{
+    CRMODE_NONE,
+    CRMODE_SINGLE_SCREEN,
+    CRMODE_MULTI_SCREEN
+};
+
 /**
  * Information about the xrdp client
  *
@@ -199,7 +206,9 @@ struct xrdp_client_info
     int no_orders_supported;
     int use_cache_glyph_v2;
     int rail_enable;
-    int suppress_output;
+    // Mask of reasons why output may be suppressed
+    // (see enum suppress_output_reason)
+    unsigned int suppress_output_mask;
 
     int enable_token_login;
     char domain_user_separator[16];
@@ -215,7 +224,26 @@ struct xrdp_client_info
     unsigned int session_physical_height; /* in mm */
 
     int large_pointer_support_flags;
+    int gfx;
+
+    // Can we resize the desktop by using a Deactivation-Reactivation Sequence?
+    enum client_resize_mode client_resize_mode;
 };
+
+enum xrdp_encoder_flags
+{
+    NONE                                   = 0,
+    ENCODE_COMPLETE                        = 1 << 0,
+    GFX_PROGRESSIVE_RFX                    = 1 << 1,
+    GFX_H264                               = 1 << 2,
+    KEY_FRAME_REQUESTED                    = 1 << 3
+};
+
+/*
+ * Return true if output is suppressed for a particular reason
+ */
+#define OUTPUT_SUPPRESSED_FOR_REASON(ci,reason) \
+    (((ci)->suppress_output_mask & (unsigned int)reason) != 0)
 
 /* yyyymmdd of last incompatible change to xrdp_client_info */
 /* also used for changes to all the xrdp installed headers */

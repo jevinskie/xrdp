@@ -18,8 +18,6 @@
  */
 
 /*
- * @file sesman/chansrv/smartcard_pcsc.c
- *
  * smartcard redirection support, PCSC daemon standin
  * this will act like pcsc daemon
  * pcsc lib and daemon write struct on unix domain socket for communication
@@ -53,6 +51,7 @@
 #include "trans.h"
 #include "chansrv.h"
 #include "list.h"
+#include "smartcard_pcsc.h"
 
 #if PCSC_STANDIN
 
@@ -149,7 +148,7 @@ get_uds_client_by_id(int uds_client_id)
 }
 
 /*****************************************************************************/
-struct pcsc_context *
+static struct pcsc_context *
 get_pcsc_context_by_app_context(struct pcsc_uds_client *uds_client,
                                 tui32 app_context)
 {
@@ -177,7 +176,7 @@ get_pcsc_context_by_app_context(struct pcsc_uds_client *uds_client,
 }
 
 /*****************************************************************************/
-struct pcsc_card *
+static struct pcsc_card *
 get_pcsc_card_by_app_card(struct pcsc_uds_client *uds_client,
                           tui32 app_card, struct pcsc_context **acontext)
 {
@@ -443,7 +442,7 @@ scard_pcsc_check_wait_objs(void)
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_establish_context(struct trans *con, struct stream *in_s)
 {
     int dwScope;
@@ -527,7 +526,7 @@ scard_function_establish_context_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_release_context(struct trans *con, struct stream *in_s)
 {
     int hContext;
@@ -603,7 +602,7 @@ struct pcsc_list_readers
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_list_readers(struct trans *con, struct stream *in_s)
 {
     int hContext;
@@ -654,6 +653,44 @@ scard_process_list_readers(struct trans *con, struct stream *in_s)
 }
 
 /*****************************************************************************/
+/**
+ * Counts the number of non-NULL strings in a multistring
+ *
+ * [MS-RDPESC] A multistring is "A series of null-terminated character
+ * strings terminated by a final null character stored in a contiguous
+ * block of memory."
+ *
+ * The string is guaranteed to have at least the returned number of NULL
+ * characters in it
+ */
+static unsigned int
+count_multistring_elements(const char *str, unsigned int len)
+{
+    unsigned int rv = 0;
+
+    if (str != NULL)
+    {
+        while (len > 0)
+        {
+            // Look for a terminator
+            const char *p = (const char *)memchr(str, '\0', len);
+            if (!p || p == str)
+            {
+                // No terminator, or an empty string encountered */
+                break;
+            }
+
+            ++rv;
+            ++p; // Skip terminator
+            len -= (p - str);
+            str = p;
+        }
+    }
+
+    return rv;
+}
+
+/*****************************************************************************/
 int
 scard_function_list_readers_return(void *user_data,
                                    struct stream *in_s,
@@ -685,19 +722,16 @@ scard_function_list_readers_return(void *user_data,
      * 16       Multistring data
      */
     struct stream *out_s;
-    int            chr;
     int            readers;
-    int            rn_index;
     int            index;
     int            bytes;
     int            cchReaders;
     int            llen;
     int uds_client_id;
-    twchar         reader_name[100];
-    char           lreader_name[16][100];
     struct pcsc_uds_client *uds_client;
     struct trans *con;
     struct pcsc_list_readers *pcscListReaders;
+    char *msz_readers = NULL;
 
     LOG_DEVEL(LOG_LEVEL_DEBUG, "scard_function_list_readers_return:");
     LOG_DEVEL(LOG_LEVEL_DEBUG, "  status 0x%8.8x", status);
@@ -721,9 +755,6 @@ scard_function_list_readers_return(void *user_data,
         return 1;
     }
     con = uds_client->con;
-    g_memset(reader_name, 0, sizeof(reader_name));
-    g_memset(lreader_name, 0, sizeof(lreader_name));
-    rn_index = 0;
     readers = 0;
     llen = 0;
     if (status == 0)
@@ -733,39 +764,23 @@ scard_function_list_readers_return(void *user_data,
         // Move to length of multistring in bytes
         in_uint8s(in_s, 12);
 
-        in_uint32_le(in_s, len);
-        llen = len;
+        in_uint32_le(in_s, llen);
         if (cchReaders > 0)
         {
-            while (len > 0)
+            // Convert the wide multistring to a UTF-8 multistring
+            unsigned int u8len;
+            u8len = in_utf16_le_fixed_as_utf8_length(in_s, len / 2);
+            msz_readers = (char *)malloc(u8len);
+            if (msz_readers == NULL)
             {
-                in_uint16_le(in_s, chr);
-                len -= 2;
-                if (chr == 0)
-                {
-                    if (reader_name[0] != 0)
-                    {
-                        g_wcstombs(lreader_name[readers], reader_name, 99);
-                        g_memset(reader_name, 0, sizeof(reader_name));
-                        readers++;
-                    }
-                    reader_name[0] = 0;
-                    rn_index = 0;
-                }
-                else
-                {
-                    reader_name[rn_index] = chr;
-                    rn_index++;
-                }
+                LOG(LOG_LEVEL_ERROR, "scard_function_list_readers_return: "
+                    "Can't allocate %u bytes of memory", u8len);
+                readers = 0;
             }
-        }
-        if (rn_index > 0)
-        {
-            if (reader_name[0] != 0)
+            else
             {
-                g_wcstombs(lreader_name[readers], reader_name, 99);
-                g_memset(reader_name, 0, sizeof(reader_name));
-                readers++;
+                in_utf16_le_fixed_as_utf8(in_s, len / 2, msz_readers, u8len);
+                readers = count_multistring_elements(msz_readers, u8len);
             }
         }
     }
@@ -778,10 +793,25 @@ scard_function_list_readers_return(void *user_data,
     s_push_layer(out_s, iso_hdr, 8);
     out_uint32_le(out_s, llen);
     out_uint32_le(out_s, readers);
-    for (index = 0; index < readers; index++)
     {
-        out_uint8a(out_s, lreader_name[index], 100);
+        const char *p = msz_readers;
+        for (index = 0; index < readers; index++)
+        {
+            unsigned int slen = strlen(p);
+            if (slen < 100)
+            {
+                out_uint8a(out_s, p, slen);
+                out_uint8s(out_s, 100 - slen);
+            }
+            else
+            {
+                out_uint8a(out_s, p, 99);
+                out_uint8s(out_s, 1);
+            }
+            p += (slen + 1);
+        }
     }
+    free(msz_readers);
     out_uint32_le(out_s, status); /* SCARD_S_SUCCESS status */
     s_mark_end(out_s);
     bytes = (int) (out_s->end - out_s->data);
@@ -793,7 +823,7 @@ scard_function_list_readers_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_connect(struct trans *con, struct stream *in_s)
 {
     int hContext;
@@ -896,7 +926,7 @@ scard_function_connect_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_disconnect(struct trans *con, struct stream *in_s)
 {
     int hCard;
@@ -966,7 +996,7 @@ scard_function_disconnect_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_begin_transaction(struct trans *con, struct stream *in_s)
 {
     int hCard;
@@ -1036,7 +1066,7 @@ scard_function_begin_transaction_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_end_transaction(struct trans *con, struct stream *in_s)
 {
     int hCard;
@@ -1128,7 +1158,7 @@ struct pcsc_transmit
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_transmit(struct trans *con, struct stream *in_s)
 {
     int hCard;
@@ -1269,7 +1299,7 @@ scard_function_transmit_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_control(struct trans *con, struct stream *in_s)
 {
     int hCard;
@@ -1371,7 +1401,7 @@ struct pcsc_status
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_status(struct trans *con, struct stream *in_s)
 {
     int hCard;
@@ -1466,14 +1496,12 @@ scard_function_status_return(void *user_data,
      * 60       Multistring data
      */
     struct stream *out_s;
-    int index;
     int bytes;
     int dwReaderLen;
     int dwState;
     int dwProtocol;
     int dwAtrLen;
     char attr[32];
-    twchar reader_name[100];
     char lreader_name[100];
     int uds_client_id;
     struct pcsc_uds_client *uds_client;
@@ -1519,33 +1547,20 @@ scard_function_status_return(void *user_data,
         in_uint32_le(in_s, dwProtocol);
         in_uint8a(in_s, attr, 32);
         in_uint32_le(in_s, dwAtrLen);
-        if (dwReaderLen > 0)
+
+        // Length of multistring and multistring data
+        if (dwReaderLen <= 0)
         {
-            in_uint32_le(in_s, dwReaderLen);
-            dwReaderLen /= 2;
+            lreader_name[0] = '\0';
         }
         else
         {
-            dwReaderLen = 1;
+            in_uint8s(in_s, 4);  // Skip length of msz in bytes
+
+            // TODO: why are we just returning the first name of the card?
+            in_utf16_le_terminated_as_utf8(in_s, lreader_name,
+                                           sizeof(lreader_name));
         }
-        if (dwReaderLen < 1)
-        {
-            LOG(LOG_LEVEL_ERROR, "scard_function_status_return: dwReaderLen < 1");
-            dwReaderLen = 1;
-        }
-        if (dwReaderLen > 99)
-        {
-            LOG_DEVEL(LOG_LEVEL_WARNING, "scard_function_status_return: dwReaderLen too big "
-                      "0x%8.8x", dwReaderLen);
-            dwReaderLen = 99;
-        }
-        g_memset(reader_name, 0, sizeof(reader_name));
-        g_memset(lreader_name, 0, sizeof(lreader_name));
-        for (index = 0; index < dwReaderLen - 1; index++)
-        {
-            in_uint16_le(in_s, reader_name[index]);
-        }
-        g_wcstombs(lreader_name, reader_name, 99);
     }
     LOG_DEVEL(LOG_LEVEL_DEBUG, "scard_function_status_return: dwAtrLen %d dwReaderLen %d "
               "dwProtocol %d dwState %d name %s",
@@ -1574,7 +1589,7 @@ scard_function_status_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_get_status_change(struct trans *con, struct stream *in_s)
 {
     int index;
@@ -1711,7 +1726,7 @@ scard_function_get_status_change_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_cancel(struct trans *con, struct stream *in_s)
 {
     int hContext;
@@ -1797,7 +1812,7 @@ int scard_function_reconnect_return(void *user_data,
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 scard_process_msg(struct trans *con, struct stream *in_s, int command)
 {
     int rv;
@@ -1892,7 +1907,7 @@ scard_process_msg(struct trans *con, struct stream *in_s, int command)
 
 /*****************************************************************************/
 /* returns error */
-int
+static int
 my_pcsc_trans_data_in(struct trans *trans)
 {
     struct stream *s;
@@ -1919,7 +1934,7 @@ my_pcsc_trans_data_in(struct trans *trans)
 
 /*****************************************************************************/
 /* got a new connection from libpcsclite */
-int
+static int
 my_pcsc_trans_conn_in(struct trans *trans, struct trans *new_trans)
 {
     struct pcsc_uds_client *uds_client;

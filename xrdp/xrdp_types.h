@@ -28,6 +28,7 @@
 #include "xrdp_constants.h"
 #include "fifo.h"
 #include "guid.h"
+#include "xrdp_client_info.h"
 
 #define MAX_NR_CHANNELS 16
 #define MAX_CHANNEL_NAME 16
@@ -63,7 +64,10 @@ struct xrdp_mod
     int (*mod_suppress_output)(struct xrdp_mod *v, int suppress,
                                int left, int top, int right, int bottom);
     int (*mod_server_monitor_resize)(struct xrdp_mod *v,
-                                     int width, int height);
+                                     int width, int height,
+                                     int num_monitors,
+                                     const struct monitor_info *monitors,
+                                     int *in_progress);
     int (*mod_server_monitor_full_invalidate)(struct xrdp_mod *v,
             int width, int height);
     int (*mod_server_version_message)(struct xrdp_mod *v);
@@ -105,7 +109,10 @@ struct xrdp_mod
                             int box_left, int box_top,
                             int box_right, int box_bottom,
                             int x, int y, char *data, int data_len);
-    int (*server_reset)(struct xrdp_mod *v, int width, int height, int bpp);
+    int (*client_monitor_resize)(struct xrdp_mod *v, int width, int height,
+                                 int num_monitors,
+                                 const struct monitor_info *monitors);
+    int (*server_monitor_resize_done)(struct xrdp_mod *v);
     int (*server_get_channel_count)(struct xrdp_mod *v);
     int (*server_query_channel)(struct xrdp_mod *v, int index,
                                 char *channel_name,
@@ -181,7 +188,10 @@ struct xrdp_mod
                                  int width, int height,
                                  int flags, int frame_id,
                                  void *shmem_ptr, int shmem_bytes);
-    tintptr server_dumby[100 - 48]; /* align, 100 minus the number of server
+    int (*server_egfx_cmd)(struct xrdp_mod *v,
+                           char *cmd, int cmd_bytes,
+                           char *data, int data_bytes);
+    tintptr server_dumby[100 - 50]; /* align, 100 minus the number of server
                                      functions above */
     /* common */
     tintptr handle; /* pointer to self as int */
@@ -343,8 +353,11 @@ enum display_resize_state
     WMRZ_EGFX_CONN_CLOSED,
     WRMZ_EGFX_DELETE,
     WMRZ_SERVER_MONITOR_RESIZE,
-    WMRZ_SERVER_VERSION_MESSAGE,
-    WMRZ_XRDP_CORE_RESIZE,
+    WMRZ_SERVER_MONITOR_MESSAGE_PROCESSING,
+    WMRZ_SERVER_MONITOR_MESSAGE_PROCESSED,
+    WMRZ_XRDP_CORE_RESET,
+    WMRZ_XRDP_CORE_RESET_PROCESSING,
+    WMRZ_XRDP_CORE_RESET_PROCESSED,
     WMRZ_EGFX_INITIALIZE,
     WMRZ_EGFX_INITALIZING,
     WMRZ_EGFX_INITIALIZED,
@@ -362,8 +375,15 @@ enum display_resize_state
      (status) == WMRZ_EGFX_CONN_CLOSED ? "WMRZ_EGFX_CONN_CLOSED" : \
      (status) == WRMZ_EGFX_DELETE ? "WMRZ_EGFX_DELETE" : \
      (status) == WMRZ_SERVER_MONITOR_RESIZE ? "WMRZ_SERVER_MONITOR_RESIZE" : \
-     (status) == WMRZ_SERVER_VERSION_MESSAGE ? "WMRZ_SERVER_VERSION_MESSAGE" : \
-     (status) == WMRZ_XRDP_CORE_RESIZE ? "WMRZ_XRDP_CORE_RESIZE" : \
+     (status) == WMRZ_SERVER_MONITOR_MESSAGE_PROCESSING ? \
+     "WMRZ_SERVER_MONITOR_MESSAGE_PROCESSING" : \
+     (status) == WMRZ_SERVER_MONITOR_MESSAGE_PROCESSED ? \
+     "WMRZ_SERVER_MONITOR_MESSAGE_PROCESSED" : \
+     (status) == WMRZ_XRDP_CORE_RESET ? "WMRZ_XRDP_CORE_RESET" : \
+     (status) == WMRZ_XRDP_CORE_RESET_PROCESSING ? \
+     "WMRZ_XRDP_CORE_RESET_PROCESSING" : \
+     (status) == WMRZ_XRDP_CORE_RESET_PROCESSED ? \
+     "WMRZ_XRDP_CORE_RESET_PROCESSED" : \
      (status) == WMRZ_EGFX_INITIALIZE ? "WMRZ_EGFX_INITIALIZE" : \
      (status) == WMRZ_EGFX_INITALIZING ? "WMRZ_EGFX_INITALIZING" : \
      (status) == WMRZ_EGFX_INITIALIZED ? "WMRZ_EGFX_INITIALIZED" : \
@@ -373,6 +393,13 @@ enum display_resize_state
      (status) == WMRZ_ERROR ? "WMRZ_ERROR" : \
      "unknown" \
     )
+
+enum xrdp_egfx_flags
+{
+    XRDP_EGFX_NONE = 0,
+    XRDP_EGFX_H264 = 1,
+    XRDP_EGFX_RFX_PRO = 2
+};
 
 struct xrdp_mm
 {
@@ -410,7 +437,9 @@ struct xrdp_mm
     int dynamic_monitor_chanid;
     struct xrdp_egfx *egfx;
     int egfx_up;
-
+    enum xrdp_egfx_flags egfx_flags;
+    int gfx_delay_autologin;
+    int mod_uses_wm_screen_for_gfx;
     /* Resize on-the-fly control */
     struct display_control_monitor_layout_data *resize_data;
     struct list *resize_queue;
@@ -420,7 +449,7 @@ struct xrdp_mm
 struct xrdp_key_info
 {
     int sym;
-    int chr;
+    char32_t chr;
 };
 
 struct xrdp_keymap
@@ -633,7 +662,7 @@ struct xrdp_bitmap
     struct list *child_list;
     /* for edit */
     int edit_pos;
-    twchar password_char;
+    char32_t password_char;
     /* for button or combo */
     int state; /* for button 0 = normal 1 = down */
     /* for combo */

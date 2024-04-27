@@ -241,7 +241,7 @@ sesexec_terminate_main_loop(int status)
 static void
 process_sigchld_event(void)
 {
-    struct exit_status e;
+    struct proc_exit_status e;
     int pid;
 
     // Check for any finished children
@@ -283,7 +283,7 @@ sesexec_main_loop(void)
             continue;
         }
 
-        if (g_obj_wait(robjs, robjs_count, NULL, 0, 0) != 0)
+        if (g_obj_wait(robjs, robjs_count, NULL, 0, -1) != 0)
         {
             /* should not get here */
             LOG(LOG_LEVEL_WARNING, "sesexec_main_loop: "

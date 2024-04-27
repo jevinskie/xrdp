@@ -467,7 +467,7 @@ xrdp_wm_show_edits(struct xrdp_wm *self, struct xrdp_bitmap *combo)
                 {
                     g_strncpy(b->caption1, value + ASK_LEN, 255);
                 }
-                b->edit_pos = g_mbstowcs(0, b->caption1, 0);
+                b->edit_pos = utf8_char_count(b->caption1);
 
                 if (self->login_window->focused_control == 0)
                 {
@@ -486,7 +486,7 @@ xrdp_wm_show_edits(struct xrdp_wm *self, struct xrdp_bitmap *combo)
                             self->session->client_info->domain,
                             combo->data_list->count, 0, resultIP);
                         g_strncpy(b->caption1, resultIP, 255);
-                        b->edit_pos = g_mbstowcs(0, b->caption1, 0);
+                        b->edit_pos = utf8_char_count(b->caption1);
                     }
 
                 }
@@ -495,7 +495,7 @@ xrdp_wm_show_edits(struct xrdp_wm *self, struct xrdp_bitmap *combo)
                         self->session->client_info->username[0])
                 {
                     g_strncpy(b->caption1, self->session->client_info->username, 255);
-                    b->edit_pos = g_mbstowcs(0, b->caption1, 0);
+                    b->edit_pos = utf8_char_count(b->caption1);
 
                     if (b->edit_pos > 0)
                     {
@@ -1458,8 +1458,6 @@ load_xrdp_config(struct xrdp_config *config, const char *xrdp_ini, int bpp)
     LOG(LOG_LEVEL_DEBUG, "tcp_keepalive:           %d", globals->tcp_keepalive);
     LOG(LOG_LEVEL_DEBUG, "tcp_send_buffer_bytes:   %d", globals->tcp_send_buffer_bytes);
     LOG(LOG_LEVEL_DEBUG, "tcp_recv_buffer_bytes:   %d", globals->tcp_recv_buffer_bytes);
-    LOG(LOG_LEVEL_DEBUG, "new_cursors:             %d", globals->new_cursors);
-    LOG(LOG_LEVEL_DEBUG, "allow_multimon:          %d", globals->allow_multimon);
 
     LOG(LOG_LEVEL_DEBUG, "grey:                    %d", globals->grey);
     LOG(LOG_LEVEL_DEBUG, "black:                   %d", globals->black);

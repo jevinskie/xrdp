@@ -140,7 +140,7 @@ xrdp_listen_delete_done_pro(struct xrdp_listen *self)
 
 /*****************************************************************************/
 /* i can't get stupid in_val to work, hum using global var for now */
-THREAD_RV THREAD_CC
+static THREAD_RV THREAD_CC
 xrdp_process_run(void *in_val)
 {
     struct xrdp_process *process;
@@ -716,47 +716,45 @@ xrdp_listen_process_startup_params(struct xrdp_listen *self)
             if (startup_params->tcp_send_buffer_bytes > 0)
             {
                 bytes = startup_params->tcp_send_buffer_bytes;
-                LOG(LOG_LEVEL_INFO, "setting send buffer to %d bytes",
-                    bytes);
                 if (g_sck_set_send_buffer_bytes(ltrans->sck, bytes) != 0)
                 {
                     LOG(LOG_LEVEL_WARNING, "error setting send buffer");
                 }
+                else if (g_sck_get_send_buffer_bytes(ltrans->sck, &bytes) != 0)
+                {
+                    LOG(LOG_LEVEL_WARNING, "error getting send buffer");
+                }
+                else if (bytes != startup_params->tcp_send_buffer_bytes)
+                {
+                    LOG(LOG_LEVEL_WARNING, "send buffer set to %d "
+                        "bytes but %d bytes requested", bytes,
+                        startup_params->tcp_send_buffer_bytes);
+                }
                 else
                 {
-                    if (g_sck_get_send_buffer_bytes(ltrans->sck, &bytes) != 0)
-                    {
-                        LOG(LOG_LEVEL_WARNING, "error getting send "
-                            "buffer");
-                    }
-                    else
-                    {
-                        LOG(LOG_LEVEL_INFO, "send buffer set to %d "
-                            "bytes", bytes);
-                    }
+                    LOG(LOG_LEVEL_INFO, "send buffer set to %d bytes", bytes);
                 }
             }
             if (startup_params->tcp_recv_buffer_bytes > 0)
             {
                 bytes = startup_params->tcp_recv_buffer_bytes;
-                LOG(LOG_LEVEL_INFO, "setting recv buffer to %d bytes",
-                    bytes);
                 if (g_sck_set_recv_buffer_bytes(ltrans->sck, bytes) != 0)
                 {
                     LOG(LOG_LEVEL_WARNING, "error setting recv buffer");
                 }
+                else if (g_sck_get_recv_buffer_bytes(ltrans->sck, &bytes) != 0)
+                {
+                    LOG(LOG_LEVEL_WARNING, "error getting recv buffer");
+                }
+                else if (bytes != startup_params->tcp_recv_buffer_bytes)
+                {
+                    LOG(LOG_LEVEL_WARNING, "recv buffer set to %d "
+                        "bytes but %d bytes requested", bytes,
+                        startup_params->tcp_recv_buffer_bytes);
+                }
                 else
                 {
-                    if (g_sck_get_recv_buffer_bytes(ltrans->sck, &bytes) != 0)
-                    {
-                        LOG(LOG_LEVEL_WARNING, "error getting recv "
-                            "buffer");
-                    }
-                    else
-                    {
-                        LOG(LOG_LEVEL_INFO, "recv buffer set to %d "
-                            "bytes", bytes);
-                    }
+                    LOG(LOG_LEVEL_INFO, "recv buffer set to %d bytes", bytes);
                 }
             }
         }
@@ -856,12 +854,12 @@ xrdp_listen_conn_in(struct trans *self, struct trans *new_self)
 static void
 process_pending_sigchld_events(void)
 {
-    struct exit_status e;
+    struct proc_exit_status e;
     int pid;
 
     while ((pid = g_waitchild(&e)) > 0)
     {
-        if (e.reason == E_XR_SIGNAL)
+        if (e.reason == E_PXR_SIGNAL)
         {
             char sigstr[MAXSTRSIGLEN];
             LOG(LOG_LEVEL_ERROR,

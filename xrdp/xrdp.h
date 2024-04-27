@@ -333,6 +333,17 @@ xrdp_painter_draw_bitmap(struct xrdp_painter *self,
                          int x, int y, int cx, int cy);
 int
 xrdp_painter_text_width(struct xrdp_painter *self, const char *text);
+
+/* As above, but have a maximum Unicode character count for the string */
+int
+xrdp_painter_text_width_count(struct xrdp_painter *self,
+                              const char *text, unsigned int c32_count);
+
+/* Size of a string composed of a repeated number of Unicode characters */
+int
+xrdp_painter_repeated_char_width(struct xrdp_painter *self,
+                                 char32_t c32, unsigned int repeat_count);
+
 unsigned int
 xrdp_painter_font_body_height(const struct xrdp_painter *self);
 int
@@ -348,6 +359,11 @@ xrdp_painter_draw_text2(struct xrdp_painter *self,
                         int box_left, int box_top,
                         int box_right, int box_bottom,
                         int x, int y, char *data, int data_len);
+int
+xrdp_painter_draw_char(struct xrdp_painter *self,
+                       struct xrdp_bitmap *bitmap,
+                       int x, int y, char32_t chr,
+                       unsigned int repeat_count);
 int
 xrdp_painter_copy(struct xrdp_painter *self,
                   struct xrdp_bitmap *src,
@@ -403,13 +419,7 @@ rect_contained_by(struct xrdp_rect *in1, int left, int top,
 int
 check_bounds(struct xrdp_bitmap *b, int *x, int *y, int *cx, int *cy);
 int
-add_char_at(char *text, int text_size, twchar ch, int index);
-int
-remove_char_at(char *text, int text_size, int index);
-int
 set_string(char **in_str, const char *in);
-int
-wchar_repeat(twchar *dest, int dest_size_in_wchars, twchar ch, int repeat);
 
 /* in lang.c */
 struct xrdp_key_info *
@@ -420,7 +430,7 @@ int
 get_keysym_from_scan_code(int device_flags, int scan_code, int *keys,
                           int caps_lock, int num_lock, int scroll_lock,
                           struct xrdp_keymap *keymap);
-twchar
+char32_t
 get_char_from_scan_code(int device_flags, int scan_code, int *keys,
                         int caps_lock, int num_lock, int scroll_lock,
                         struct xrdp_keymap *keymap);
@@ -461,6 +471,9 @@ struct display_control_monitor_layout_data
     enum display_resize_state state;
     int last_state_update_timestamp;
     int start_time;
+    /// This flag is set if the state machine needs to
+    /// shutdown/startup EGFX
+    int using_egfx;
 };
 
 int
@@ -468,6 +481,8 @@ xrdp_mm_drdynvc_up(struct xrdp_mm *self);
 int
 xrdp_mm_suppress_output(struct xrdp_mm *self, int suppress,
                         int left, int top, int right, int bottom);
+int
+xrdp_mm_up_and_running(struct xrdp_mm *self);
 struct xrdp_mm *
 xrdp_mm_create(struct xrdp_wm *owner);
 void
@@ -487,10 +502,14 @@ int
 xrdp_mm_check_wait_objs(struct xrdp_mm *self);
 int
 xrdp_mm_frame_ack(struct xrdp_mm *self, int frame_id);
+void
+xrdp_mm_efgx_add_dirty_region_to_planar_list(struct xrdp_mm *self,
+        struct xrdp_region *dirty_region);
 int
 xrdp_mm_egfx_send_planar_bitmap(struct xrdp_mm *self,
                                 struct xrdp_bitmap *bitmap,
-                                struct xrdp_rect *rect);
+                                struct xrdp_rect *rect,
+                                int surface_id, int x, int y);
 int
 server_begin_update(struct xrdp_mod *mod);
 int
@@ -533,7 +552,8 @@ server_set_pointer_large(struct xrdp_mod *mod, int x, int y,
                          char *data, char *mask, int bpp,
                          int width, int height);
 int
-server_paint_rects_ex(struct xrdp_mod *mod, int num_drects, short *drects,
+server_paint_rects_ex(struct xrdp_mod *mod,
+                      int num_drects, short *drects,
                       int num_crects, short *crects,
                       char *data, int left, int top,
                       int width, int height,
@@ -574,7 +594,10 @@ server_draw_text(struct xrdp_mod *mod, int font,
                  int box_right, int box_bottom,
                  int x, int y, char *data, int data_len);
 int
-server_reset(struct xrdp_mod *mod, int width, int height, int bpp);
+client_monitor_resize(struct xrdp_mod *mod, int width, int height,
+                      int num_monitors, const struct monitor_info *monitors);
+int
+server_monitor_resize_done(struct xrdp_mod *mod);
 int
 is_channel_allowed(struct xrdp_wm *wm, int channel_id);
 int
@@ -635,5 +658,9 @@ server_add_char_alpha(struct xrdp_mod *mod, int font, int character,
                       int width, int height, char *data);
 int
 server_session_info(struct xrdp_mod *mod, const char *data, int data_bytes);
+int
+server_egfx_cmd(struct xrdp_mod *v,
+                char *cmd, int cmd_bytes,
+                char *data, int data_bytes);
 
 #endif

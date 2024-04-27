@@ -22,6 +22,12 @@
 #endif
 
 #include "xrdp-neutrinordp.h"
+#include "defines.h"
+#include "log.h"
+#include "os_calls.h"
+#include "string_calls.h"
+
+#include "xrdp-color.h"
 
 char *
 convert_bitmap(int in_bpp, int out_bpp, char *bmpdata,

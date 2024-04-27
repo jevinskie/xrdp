@@ -95,15 +95,10 @@ struct sockaddr_hvs
 #endif
 
 #include "os_calls.h"
+#include "limits.h"
 #include "string_calls.h"
 #include "log.h"
 #include "xrdp_constants.h"
-
-/* for clearenv() */
-#if defined(_WIN32)
-#else
-extern char **environ;
-#endif
 
 #if defined(__linux__)
 #include <linux/unistd.h>
@@ -159,20 +154,6 @@ g_init(const char *app_name)
 
     WSAStartup(2, &wsadata);
 #endif
-
-    /* In order to get g_mbstowcs and g_wcstombs to work properly with
-       UTF-8 non-ASCII characters, LC_CTYPE cannot be "C" or blank.
-       To select UTF-8 encoding without specifying any countries/languages,
-       "C.UTF-8" is used but provided in few systems.
-
-       See also: https://sourceware.org/glibc/wiki/Proposals/C.UTF-8 */
-    char *lc_ctype;
-    lc_ctype = setlocale(LC_CTYPE, "C.UTF-8");
-    if (lc_ctype == NULL)
-    {
-        /* use en_US.UTF-8 instead if not available */
-        setlocale(LC_CTYPE, "en_US.UTF-8");
-    }
 }
 
 /*****************************************************************************/
@@ -397,6 +378,7 @@ g_tcp_socket(void)
     {
         switch (errno)
         {
+            case EPROTONOSUPPORT: /* if IPv6 is supported, but don't have an IPv6 address */
             case EAFNOSUPPORT: /* if IPv6 not supported, retry IPv4 */
                 LOG(LOG_LEVEL_INFO, "IPv6 not supported, falling back to IPv4");
                 rv = (int)socket(AF_INET, SOCK_STREAM, 0);
@@ -445,23 +427,6 @@ g_tcp_socket(void)
             option_value = 1;
             option_len = sizeof(option_value);
             if (setsockopt(rv, SOL_SOCKET, SO_REUSEADDR, (char *)&option_value,
-                           option_len) < 0)
-            {
-                LOG(LOG_LEVEL_ERROR, "g_tcp_socket: setsockopt() failed");
-            }
-        }
-    }
-
-    option_len = sizeof(option_value);
-
-    if (getsockopt(rv, SOL_SOCKET, SO_SNDBUF, (char *)&option_value,
-                   &option_len) == 0)
-    {
-        if (option_value < (1024 * 32))
-        {
-            option_value = 1024 * 32;
-            option_len = sizeof(option_value);
-            if (setsockopt(rv, SOL_SOCKET, SO_SNDBUF, (char *)&option_value,
                            option_len) < 0)
             {
                 LOG(LOG_LEVEL_ERROR, "g_tcp_socket: setsockopt() failed");
@@ -1993,7 +1958,7 @@ g_obj_wait(tintptr *read_objs, int rcount, tintptr *write_objs, int wcount,
         handles[j++] = (HANDLE)(write_objs[i]);
     }
 
-    if (mstimeout < 1)
+    if (mstimeout < 0)
     {
         mstimeout = INFINITE;
     }
@@ -2030,7 +1995,7 @@ g_obj_wait(tintptr *read_objs, int rcount, tintptr *write_objs, int wcount,
     }
     else
     {
-        if (mstimeout < 1)
+        if (mstimeout < 0)
         {
             mstimeout = -1;
         }
@@ -3321,10 +3286,10 @@ g_set_allusercontext(int uid)
 /*****************************************************************************/
 /* does not work in win32
    returns pid of process that exits or zero if signal occurred
-   an exit_status struct can optionally be passed in to get the
+   a proc_exit_status struct can optionally be passed in to get the
    exit status of the child */
 int
-g_waitchild(struct exit_status *e)
+g_waitchild(struct proc_exit_status *e)
 {
 #if defined(_WIN32)
     return 0;
@@ -3332,14 +3297,14 @@ g_waitchild(struct exit_status *e)
     int wstat;
     int rv;
 
-    struct exit_status dummy;
+    struct proc_exit_status dummy;
 
     if (e == NULL)
     {
         e = &dummy;  // Set this, then throw it away
     }
 
-    e->reason = E_XR_UNEXPECTED;
+    e->reason = E_PXR_UNEXPECTED;
     e->val = 0;
 
     rv = waitpid(-1, &wstat, WNOHANG);
@@ -3354,12 +3319,12 @@ g_waitchild(struct exit_status *e)
     }
     else if (WIFEXITED(wstat))
     {
-        e->reason = E_XR_STATUS_CODE;
+        e->reason = E_PXR_STATUS_CODE;
         e->val = WEXITSTATUS(wstat);
     }
     else if (WIFSIGNALED(wstat))
     {
-        e->reason = E_XR_SIGNAL;
+        e->reason = E_PXR_SIGNAL;
         e->val = WTERMSIG(wstat);
     }
 
@@ -3400,10 +3365,14 @@ g_waitpid(int pid)
 
    Note that signal handlers are established with BSD-style semantics,
    so this call is NOT interrupted by a signal  */
-struct exit_status
+struct proc_exit_status
 g_waitpid_status(int pid)
 {
-    struct exit_status exit_status = {.reason = E_XR_UNEXPECTED, .val = 0};
+    struct proc_exit_status exit_status =
+    {
+        .reason = E_PXR_UNEXPECTED,
+        .val = 0
+    };
 
 #if !defined(_WIN32)
     if (pid > 0)
@@ -3418,12 +3387,12 @@ g_waitpid_status(int pid)
         {
             if (WIFEXITED(status))
             {
-                exit_status.reason = E_XR_STATUS_CODE;
+                exit_status.reason = E_PXR_STATUS_CODE;
                 exit_status.val = WEXITSTATUS(status);
             }
             if (WIFSIGNALED(status))
             {
-                exit_status.reason = E_XR_SIGNAL;
+                exit_status.reason = E_PXR_SIGNAL;
                 exit_status.val = WTERMSIG(status);
             }
         }
@@ -3460,13 +3429,15 @@ g_setpgid(int pid, int pgid)
 void
 g_clearenv(void)
 {
-#if defined(_WIN32)
-#else
-#if defined(BSD)
+#if defined(HAVE_CLEARENV)
+    clearenv();
+#elif defined(_WIN32)
+#elif defined(BSD)
+    extern char **environ;
     environ[0] = 0;
 #else
+    extern char **environ;
     environ = 0;
-#endif
 #endif
 }
 
@@ -4215,4 +4186,12 @@ g_no_new_privs(void)
 #else
     return 0;
 #endif
+}
+
+/*****************************************************************************/
+void
+g_qsort(void *base, size_t nitems, size_t size,
+        int (*compar)(const void *, const void *))
+{
+    qsort(base, nitems, size, compar);
 }
